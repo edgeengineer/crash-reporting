@@ -23,6 +23,12 @@ public protocol StackTraceGeneratorProtocol {
     /// Generate a stack trace
     /// - Returns: Stack trace
     func generateStackTrace() -> StackTrace
+
+    /// Generate a stack trace from an array of raw addresses.
+    /// This is typically used for post-crash symbolication.
+    /// - Parameter addresses: An array of raw frame pointer addresses.
+    /// - Returns: Stack trace with symbolized frames where possible.
+    func generateStackTrace(fromRawAddresses addresses: [UnsafeMutableRawPointer?]) -> StackTrace
 }
 
 /// Protocol for system information collector implementations

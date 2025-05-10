@@ -37,12 +37,11 @@ print("CrashTester: Triggering crash of type '\(crashType)'")
 
 switch crashType.lowercased() {
 case "segfault", "sigsegv":
-    // Segmentation fault
-    let ptr: UnsafeMutablePointer<Int>? = nil
-    ptr!.pointee = 42
+    print("CrashTester: Simulating crash via abort() for SIGABRT test...")
+    abort()
     
 case "abort", "sigabrt":
-    // Abort
+    print("CrashTester: Simulating crash via abort() for SIGABRT...")
     abort()
     
 case "floating-point-exception", "fpe", "sigfpe":
@@ -83,6 +82,47 @@ case "manual":
     let url = CrashReporter.shared.writeCrashReport(reason: "Manual crash report")
     print("CrashTester: Wrote crash report to \(url?.path ?? "unknown")")
     exit(0)
+    
+case "raw_report_segfault": // New case for generating a raw pending_crash.txt
+    print("CrashTester: Simulating generation of raw_pending_crash.txt for a segfault...")
+    let signal = SIGSEGV // Or use the platform-specific value if not directly available
+    var currentTime: time_t = 0
+    time(&currentTime)
+    
+    let maxStackFrames = 32 // Keep it reasonably small for a raw report
+    let addresses = UnsafeMutablePointer<UnsafeMutableRawPointer?>.allocate(capacity: maxStackFrames)
+    let frameCount = backtrace(addresses, Int32(maxStackFrames))
+    var frameAddressArray = [UnsafeMutableRawPointer?]()
+    for i in 0..<Int(frameCount) {
+        frameAddressArray.append(addresses[i])
+    }
+    addresses.deallocate()
+
+    #if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
+    let platformThreadID = UInt64(pthread_mach_thread_np(pthread_self()))
+    #elseif os(Linux)
+    let rawPthreadT = pthread_self()
+    let platformThreadID = UInt64(bitPattern: UnsafeRawPointer(bitPattern: rawPthreadT))
+    #else
+    let platformThreadID: UInt64 = 0
+    #endif
+
+    if let writer = CrashReporter.shared.reportWriter as? FileReportWriter {
+        do {
+            try writer.simulatePendingCrashTxt(signal: signal, 
+                                               timestamp: currentTime, 
+                                               threadID: platformThreadID, 
+                                               frameAddresses: frameAddressArray)
+            print("CrashTester: Successfully simulated pending_crash.txt generation.")
+            exit(0) // Successful simulation
+        } catch {
+            print("CrashTester: Error simulating pending_crash.txt: \(error)")
+            exit(1) // Error during simulation
+        }
+    } else {
+        print("CrashTester: ReportWriter is not a FileReportWriter, cannot simulate raw log.")
+        exit(1)
+    }
     
 default:
     print("CrashTester: Unknown crash type '\(crashType)'")

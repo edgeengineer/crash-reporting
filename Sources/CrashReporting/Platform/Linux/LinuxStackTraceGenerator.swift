@@ -53,6 +53,68 @@ public class LinuxStackTraceGenerator: StackTraceGeneratorProtocol {
         return StackTrace(frames: frames)
     }
     
+    public func generateStackTrace(fromRawAddresses addresses: [UnsafeMutableRawPointer?]) -> StackTrace {
+        var frames: [StackFrame] = []
+
+        for rawAddressOptional in addresses {
+            let addressString: String
+            var frame: StackFrame
+
+            if let rawAddress = rawAddressOptional {
+                let numericAddress = UInt(bitPattern: OpaquePointer(rawAddress))
+                addressString = "0x" + String(numericAddress, radix: 16, uppercase: false)
+
+                var info = Dl_info()
+                if dladdr(rawAddress, &info) != 0 {
+                    // dladdr succeeded
+                    let moduleName: String? = (info.dli_fname != nil) ? String(cString: info.dli_fname) : nil
+                    var symbolName: String? = (info.dli_sname != nil) ? String(cString: info.dli_sname) : nil
+                    
+                    if let mangled = symbolName, let demangled = try? demangleSwiftSymbol(mangled) {
+                        symbolName = demangled
+                    }
+
+                    var offset: Int? = nil
+                    if let symbolStartAddress = info.dli_saddr {
+                        // Use UInt for direct pointer arithmetic if pointers are non-nil
+                        let uAddr = UInt(bitPattern: OpaquePointer(rawAddress))
+                        let uSymAddr = UInt(bitPattern: OpaquePointer(symbolStartAddress))
+                        if uAddr >= uSymAddr {
+                            offset = Int(uAddr - uSymAddr)
+                        }
+                    }
+
+                    var fileName: String? = moduleName
+                    var lineNumber: Int? = nil
+
+                    if let modName = moduleName, !modName.isEmpty {
+                        if let (fName, lNum) = getSymbolInfoWithAddr2line(address: addressString, module: modName) {
+                            fileName = fName
+                            lineNumber = lNum
+                        }
+                    }
+                    
+                    frame = StackFrame(
+                        address: addressString,
+                        symbolName: symbolName ?? "<unknown symbol>",
+                        offset: offset,
+                        fileName: fileName,
+                        lineNumber: lineNumber
+                    )
+                } else {
+                    // dladdr failed
+                    frame = StackFrame(address: addressString, symbolName: "<dladdr failed>")
+                }
+            } else {
+                // Address was nil
+                addressString = "0x0 (nil address)"
+                frame = StackFrame(address: addressString, symbolName: "<nil address pointer>")
+            }
+            frames.append(frame)
+        }
+        return StackTrace(frames: frames)
+    }
+    
     // MARK: - Private Methods
     
     /// Process a symbol string from backtrace_symbols
@@ -144,6 +206,16 @@ public class LinuxStackTraceGenerator: StackTraceGeneratorProtocol {
             // Ignore errors
         }
         
+        return nil
+    }
+    
+    private func demangleSwiftSymbol(_ mangledName: String) throws -> String? {
+        // Placeholder - actual demangling needed. 
+        // On Linux, this might involve calling an external swift demangler tool or linking to a Swift library that provides this.
+        // For now, return nil to indicate no change or that demangling is not yet supported here.
+        if mangledName.hasPrefix("_Z") || mangledName.hasPrefix("_T") || mangledName.hasPrefix("$s") || mangledName.hasPrefix("_$s") {
+            return nil 
+        }
         return nil
     }
 }

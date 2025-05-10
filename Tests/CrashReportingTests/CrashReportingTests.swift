@@ -179,41 +179,62 @@ struct CrashReportingTests {
         // Get the path to the CrashTester executable
         let crashTesterURL = productsDirectory.appendingPathComponent("CrashTester")
         
-        // Skip test if CrashTester doesn't exist
         guard FileManager.default.fileExists(atPath: crashTesterURL.path) else {
             Issue.record("CrashTester executable not found at \(crashTesterURL.path)")
             return
         }
         
-        // Run the CrashTester with a segfault crash
+        // Ensure no old raw log exists from previous runs in this specific test directory
+        let rawLogName = "pending_crash.txt" // Matches FileReportWriter.rawCrashLogName
+        let rawReportURL = testReportDirectory.appendingPathComponent(rawLogName)
+        try? FileManager.default.removeItem(at: rawReportURL)
+
+        // Configure CrashReporter to use the unique test directory
+        CrashReporter.shared.configure(
+            applicationName: "TestApp", // Consistent with other tests
+            applicationVersion: "1.0.0",
+            crashReportDirectory: testReportDirectory
+        )
+
+        // Run CrashTester to generate the raw_pending_crash.txt
         let process = Process()
         process.executableURL = crashTesterURL
-        process.arguments = ["segfault", testReportDirectory.path]
+        process.arguments = ["raw_report_segfault", testReportDirectory.path]
         
+        print("testActualCrash: Running CrashTester to generate raw report...")
         try process.run()
         process.waitUntilExit()
         
-        // The process should have exited with a non-zero status
-        #expect(process.terminationStatus != 0, "Process did not crash as expected")
+        print("testActualCrash: CrashTester (raw_report_segfault) exited with status \(process.terminationStatus).")
+        // For raw_report_segfault, CrashTester should exit 0 if it successfully created the raw log.
+        #expect(process.terminationStatus == 0, "CrashTester (raw_report_segfault) did not exit cleanly (status 0).")
+
+        // Now, process the pending raw crash report
+        print("testActualCrash: Attempting to process pending raw crash report...")
+        let finalReportURL = CrashReporter.shared.processPendingRawCrashReport()
+
+        #expect(finalReportURL != nil, "Processing pending raw crash report did not produce a final report URL.")
         
-        // Give the crash reporter a moment to finish writing
-        Thread.sleep(forTimeInterval: 1.0)
-        
-        // Find crash report files
-        let crashReports = try FileManager.default.contentsOfDirectory(at: testReportDirectory, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension == "crash" }
-        
-        // Verify a crash report was generated
-        #expect(!crashReports.isEmpty, "No crash report was generated")
-        
-        if let reportURL = crashReports.first {
-            // Read the report content
-            let reportContent = try String(contentsOf: reportURL)
-            
-            // Verify the report contains the expected information
-            #expect(reportContent.contains("CrashTester"))
-            #expect(reportContent.contains("SIGSEGV"))
+        guard let validFinalReportURL = finalReportURL else {
+            Issue.record("Final report URL was nil after processing raw log.")
+            return
         }
+
+        #expect(FileManager.default.fileExists(atPath: validFinalReportURL.path), "Final formatted crash report file was not found.")
+
+        // Verify content of the final, fully formatted report
+        let fullReportContent = try String(contentsOf: validFinalReportURL)
+        print("--- Content of final formatted .crash report ---")
+        print(fullReportContent)
+        print("-------------------------------------------------")
+
+        #expect(fullReportContent.contains("Signal: \(SIGSEGV)"), "Final report does not contain correct signal.")
+        #expect(fullReportContent.contains("Reason: Crash (recovered from raw log)"), "Final report reason is incorrect.")
+        #expect(fullReportContent.contains("STACK TRACE"), "Final report does not contain STACK TRACE header.")
+        #expect(fullReportContent.contains("0x"), "Final report does not appear to contain raw frame addresses (0x...). An empty stack trace might be valid if no frames were captured.")
+
+        // Also check that pending_crash.txt was deleted after processing
+        #expect(!FileManager.default.fileExists(atPath: rawReportURL.path), "pending_crash.txt was not deleted after processing.")
     }
 }
 
@@ -239,24 +260,15 @@ extension CrashReportingTests {
             }
         }
         
-        // Construct the path to the debug products directory
-        // Adjust to "release" if testing release builds
         let productsDir = packageRootURL.appendingPathComponent(".build/debug")
 
-        print("Determined productsDirectory: \(productsDir.path)")
         if !FileManager.default.fileExists(atPath: productsDir.path) {
              fatalError("Products directory does not exist at expected path: \(productsDir.path). Ensure 'swift build' has been run.")
-        }
-        // Optional: Check for CrashTester specifically and print a warning if not found
-        // This can help debug if CrashTester isn't being built or is in a different configuration (e.g., release)
-        if !FileManager.default.fileExists(atPath: productsDir.appendingPathComponent("CrashTester").path) {
-             print("Warning: CrashTester executable not found in determined products directory: \(productsDir.appendingPathComponent("CrashTester").path). It might be in a different build configuration (e.g., release) or not built.")
         }
 
         return productsDir
 
         #else
-        // Fallback for other platforms if needed, though your Package.swift only defines macOS/Linux
         fatalError("Unsupported OS for productsDirectory determination")
         #endif
     }

@@ -69,6 +69,52 @@ public class MacOSStackTraceGenerator: StackTraceGeneratorProtocol {
         return StackTrace(frames: frames)
     }
     
+    public func generateStackTrace(fromRawAddresses addresses: [UnsafeMutableRawPointer?]) -> StackTrace {
+        var frames: [StackFrame] = []
+
+        for rawAddressOptional in addresses {
+            let addressString: String
+            var frame: StackFrame
+
+            if let rawAddress = rawAddressOptional {
+                let numericAddress = UInt(bitPattern: OpaquePointer(rawAddress))
+                addressString = "0x" + String(numericAddress, radix: 16, uppercase: false)
+
+                var info = Dl_info()
+                if dladdr(rawAddress, &info) != 0 {
+                    // dladdr succeeded
+                    let mangledSymbolNameFromDladdr: String?
+                    if let sname = info.dli_sname {
+                        mangledSymbolNameFromDladdr = String(cString: sname)
+                    } else {
+                        mangledSymbolNameFromDladdr = nil
+                    }
+
+                    let parsedInfo = parseMangledSymbol(mangledSymbolNameFromDladdr ?? "<unknown symbol from dladdr>", 
+                                                        address: rawAddress, 
+                                                        info: info)
+                    
+                    frame = StackFrame(
+                        address: addressString,
+                        symbolName: parsedInfo.symbolName, 
+                        offset: parsedInfo.offset,
+                        fileName: parsedInfo.fileName,
+                        lineNumber: parsedInfo.lineNumber
+                    )
+                } else {
+                    // dladdr failed
+                    frame = StackFrame(address: addressString, symbolName: "<dladdr failed>")
+                }
+            } else {
+                // Address was nil
+                addressString = "0x0 (nil address)"
+                frame = StackFrame(address: addressString, symbolName: "<nil address pointer>")
+            }
+            frames.append(frame)
+        }
+        return StackTrace(frames: frames)
+    }
+    
     // MARK: - Private Methods
     
     /// Process a symbol string from backtrace_symbols
