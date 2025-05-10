@@ -150,8 +150,8 @@ public class MacOSStackTraceGenerator: StackTraceGeneratorProtocol {
         var offset: Int?
         
         // Attempt to demangle the symbol name
-        if let demangledName = try? demangleSwiftSymbol(mangledSymbol) {
-            symbolName = demangledName
+        if let demangled = demangleSwiftSymbol(mangledSymbol) {
+            symbolName = demangled
         } else if let sname = info.dli_sname, let name = String(validatingCString: sname) {
             symbolName = name
         } else {
@@ -181,19 +181,17 @@ public class MacOSStackTraceGenerator: StackTraceGeneratorProtocol {
         return (symbolName, fileName, lineNumber, offset)
     }
     
-    // Placeholder for demangleSwiftSymbol if not already defined elsewhere
-    // You'll need the actual implementation for this.
-    // @_silgen_name("swift_demangle")
-    // private func _swift_demangleImpl(...) -> ...
-    private func demangleSwiftSymbol(_ mangledName: String) throws -> String? {
-        // This is a simplified placeholder. Real demangling is complex.
-        // You might be using an existing library or a more complete implementation.
-        if mangledName.hasPrefix("_$s") || mangledName.hasPrefix("$s") || mangledName.hasPrefix("_T0") {
-            // Very naive check, actual demangling is needed
-            // return "\(mangledName) (demangled)" // Placeholder return
-            return nil // Simulate no change if proper demangling isn't set up here
+    // Reverted to placeholder demangleSwiftSymbol
+    private func demangleSwiftSymbol(_ mangledName: String) -> String? {
+        // Placeholder - actual demangling requires resolving linker issues or using a C helper.
+        // Common Swift mangled name prefixes for a basic check:
+        if mangledName.hasPrefix("_$s") || mangledName.hasPrefix("$s") || 
+           mangledName.hasPrefix("_T0") || mangledName.hasPrefix("_Tt") {
+            // To indicate it *would* be demangled, but isn't currently.
+            // return mangledName + " [demangling_placeholder]"
+            return nil // Or return mangledName if you prefer to see it.
         }
-        return nil
+        return nil // Not a recognized Swift mangled name pattern, or demangling failed/skipped.
     }
 }
 #endif

@@ -70,7 +70,7 @@ public class LinuxStackTraceGenerator: StackTraceGeneratorProtocol {
                     let moduleName: String? = (info.dli_fname != nil) ? String(cString: info.dli_fname) : nil
                     var symbolName: String? = (info.dli_sname != nil) ? String(cString: info.dli_sname) : nil
                     
-                    if let mangled = symbolName, let demangled = try? demangleSwiftSymbol(mangled) {
+                    if let mangled = symbolName, let demangled = demangleSwiftSymbol(mangled) {
                         symbolName = demangled
                     }
 
@@ -209,14 +209,18 @@ public class LinuxStackTraceGenerator: StackTraceGeneratorProtocol {
         return nil
     }
     
-    private func demangleSwiftSymbol(_ mangledName: String) throws -> String? {
-        // Placeholder - actual demangling needed. 
-        // On Linux, this might involve calling an external swift demangler tool or linking to a Swift library that provides this.
-        // For now, return nil to indicate no change or that demangling is not yet supported here.
-        if mangledName.hasPrefix("_Z") || mangledName.hasPrefix("_T") || mangledName.hasPrefix("$s") || mangledName.hasPrefix("_$s") {
-            return nil 
+    // Reverted to placeholder demangleSwiftSymbol
+    private func demangleSwiftSymbol(_ mangledName: String) -> String? {
+        // Placeholder - actual demangling requires resolving linker issues or using a C helper.
+        // Common Swift mangled name prefixes for a basic check:
+        if mangledName.hasPrefix("_$s") || mangledName.hasPrefix("$s") || 
+           mangledName.hasPrefix("_T0") || mangledName.hasPrefix("_Tt") ||
+           mangledName.hasPrefix("_Z") { // _Z is common for C++ on Linux, might appear via swiftc
+            // To indicate it *would* be demangled, but isn't currently.
+            // return mangledName + " [demangling_placeholder]"
+            return nil // Or return mangledName if you prefer to see it.
         }
-        return nil
+        return nil // Not a recognized Swift mangled name pattern, or demangling failed/skipped.
     }
 }
 #endif
