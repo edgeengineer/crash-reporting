@@ -40,7 +40,8 @@ let package = Package(
         .testTarget(
             name: "CrashReportingTests",
             dependencies: [
-                "CrashReporting"
+                "CrashReporting",
+                .product(name: "SystemPackage", package: "swift-system")
             ]
         ),
     ]

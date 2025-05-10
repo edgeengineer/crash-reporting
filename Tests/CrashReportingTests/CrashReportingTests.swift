@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import CrashReporting
 
@@ -16,11 +17,6 @@ struct CrashReportingTests {
             at: testReportDirectory,
             withIntermediateDirectories: true
         )
-    }
-    
-    deinit {
-        // Clean up test directory
-        try? FileManager.default.removeItem(at: testReportDirectory)
     }
     
     // MARK: - Unit Tests
@@ -147,7 +143,7 @@ struct CrashReportingTests {
         
         // Skip test if CrashTester doesn't exist
         guard FileManager.default.fileExists(atPath: crashTesterURL.path) else {
-            #expect(false, "CrashTester executable not found at \(crashTesterURL.path)")
+            Issue.record("CrashTester executable not found at \(crashTesterURL.path)")
             return
         }
         
@@ -174,8 +170,8 @@ struct CrashReportingTests {
             let reportContent = try String(contentsOf: reportURL)
             
             // Verify the report contains the expected information
-            XCTAssertTrue(reportContent.contains("CrashTester"))
-            XCTAssertTrue(reportContent.contains("Manual crash report"))
+            #expect(reportContent.contains("CrashTester"))
+            #expect(reportContent.contains("Manual crash report"))
         }
     }
     
@@ -185,7 +181,7 @@ struct CrashReportingTests {
         
         // Skip test if CrashTester doesn't exist
         guard FileManager.default.fileExists(atPath: crashTesterURL.path) else {
-            #expect(false, "CrashTester executable not found at \(crashTesterURL.path)")
+            Issue.record("CrashTester executable not found at \(crashTesterURL.path)")
             return
         }
         
@@ -215,8 +211,8 @@ struct CrashReportingTests {
             let reportContent = try String(contentsOf: reportURL)
             
             // Verify the report contains the expected information
-            XCTAssertTrue(reportContent.contains("CrashTester"))
-            XCTAssertTrue(reportContent.contains("SIGSEGV"))
+            #expect(reportContent.contains("CrashTester"))
+            #expect(reportContent.contains("SIGSEGV"))
         }
     }
 }
