@@ -17,6 +17,7 @@ private let systemClose: @Sendable (Int32) -> Int32 = Glibc.close
 #else
 #error("Unsupported platform for FileReportWriter low-level system calls")
 #endif
+import CSignalHelpers // Import the C module
 
 /// Implementation of CrashReportWriterProtocol that writes to a file
 public class FileReportWriter: CrashReportWriterProtocol {
@@ -76,22 +77,38 @@ public class FileReportWriter: CrashReportWriterProtocol {
         }
     }
     
-    // New method for attempting safer (binary for dynamic parts) async-signal-safe writing
+    // writeMinimal now calls the C helper function
     public func writeMinimal(signal: Int32, timestamp: time_t, addresses: UnsafePointer<UnsafeMutableRawPointer?>, frameCount: Int, threadID: UInt64) {
         guard let fd = rawCrashLogFD, fd != -1 else {
-            return // Cannot write if FD is not valid
-        }
-
-        let testString: StaticString = "TEST_WRITE_FROM_SIGNAL_HANDLER_SIGABRT_ATTEMPT\n" // Changed message
-    
-        testString.withUTF8Buffer { bufferPtr in
-            if let baseAddress = bufferPtr.baseAddress, bufferPtr.count > 0 {
-                _ = systemWrite(fd, baseAddress, bufferPtr.count) // Write to rawCrashLogFD
-            }
+            // Cannot write if FD is not valid. 
+            // In a real scenario, logging this failure (not from signal handler) would be good.
+            return 
         }
         
-        // Try to flush the file descriptor. fsync is async-signal-safe.
-        _ = fsync(fd) 
+        // Create an array of UnsafeRawPointer? from UnsafeMutableRawPointer?
+        var rawFramesArray = [UnsafeRawPointer?]()
+        if frameCount > 0 { // Ensure frameCount is positive before iterating
+            for i in 0..<frameCount {
+                if let mutableAddr = addresses[i] {
+                    rawFramesArray.append(UnsafeRawPointer(mutableAddr))
+                } else {
+                    rawFramesArray.append(nil)
+                }
+            }
+        }
+
+        // Call the C helper function to write minimal info.
+        // Pass the array of UnsafeRawPointer?. Swift passes this as const void** to C.
+        _ = CSignalHelpers.write_minimal_crash_info_c(
+            fd,
+            signal,
+            timestamp,
+            threadID,
+            &rawFramesArray, 
+            Int32(frameCount)
+        )
+        
+        // The C function already calls fsync(fd).
     }
     
     // This method is NOT async-signal-safe. It is for testing the post-processor.

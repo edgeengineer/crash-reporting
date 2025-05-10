@@ -7,6 +7,8 @@ let package = Package(
     name: "CrashReporting",
     platforms: [
         .macOS(.v13),
+        // Add Linux support if not already present for platform versions
+        // .linux(.v5_6) // Example
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
@@ -18,31 +20,36 @@ let package = Package(
             targets: ["CrashTester"])
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-system.git", from: "1.4.0")
+        .package(url: "https://github.com/apple/swift-system.git", from: "1.4.0"),
+        // .package(url: "https://github.com/apple/swift-testing.git", from: "0.3.0") // Still removed
     ],
     targets: [
-        // Main library target
+        .target(
+            name: "CSignalHelpers",
+            dependencies: [],
+            path: "Sources/CSignalHelpers",
+            publicHeadersPath: "include" // Ensures CSignalHelpers.h is found by Swift targets
+        ),
         .target(
             name: "CrashReporting",
             dependencies: [
-                .product(name: "SystemPackage", package: "swift-system")
+                .product(name: "SystemPackage", package: "swift-system"),
+                "CSignalHelpers" // Depend on the C target
             ],
+            path: "Sources/CrashReporting", // Assuming CrashReporting Swift files are directly in here
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency")
             ]
         ),
-        // Test executable for crash testing
         .executableTarget(
             name: "CrashTester",
-            dependencies: ["CrashReporting"]
+            dependencies: ["CrashReporting"],
+            path: "Sources/CrashTester"
         ),
-        // Test target
         .testTarget(
             name: "CrashReportingTests",
-            dependencies: [
-                "CrashReporting",
-                .product(name: "SystemPackage", package: "swift-system")
-            ]
+            dependencies: ["CrashReporting"],
+            path: "Tests/CrashReportingTests"
         ),
     ]
 )

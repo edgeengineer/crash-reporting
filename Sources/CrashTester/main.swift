@@ -37,8 +37,9 @@ print("CrashTester: Triggering crash of type '\(crashType)'")
 
 switch crashType.lowercased() {
 case "segfault", "sigsegv":
-    print("CrashTester: Simulating crash via abort() for SIGABRT test...")
-    abort()
+    print("CrashTester: Simulating actual Segmentation Fault (SIGSEGV)...")
+    let ptr: UnsafeMutablePointer<Int>? = nil
+    ptr!.pointee = 42 // Actual SIGSEGV
     
 case "abort", "sigabrt":
     print("CrashTester: Simulating crash via abort() for SIGABRT...")
