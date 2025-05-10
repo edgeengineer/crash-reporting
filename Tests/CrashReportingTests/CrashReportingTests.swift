@@ -222,13 +222,42 @@ struct CrashReportingTests {
 extension CrashReportingTests {
     /// Returns the URL to the built products directory.
     var productsDirectory: URL {
-        #if os(macOS)
-        for bundle in Bundle.allBundles where bundle.bundlePath.hasSuffix(".xctest") {
-            return bundle.bundleURL.deletingLastPathComponent()
+        #if os(macOS) || os(Linux) // Common logic for SPM builds
+
+        // Get the path of the current test file
+        let currentFileURL = URL(fileURLWithPath: #filePath) // Swift 5.8+
+
+        // Navigate up to find the package root directory (which contains the .build folder)
+        var packageRootURL = currentFileURL
+        var attempts = 0 // Safety break for the loop
+        while !FileManager.default.fileExists(atPath: packageRootURL.appendingPathComponent(".build").path) {
+            packageRootURL = packageRootURL.deletingLastPathComponent()
+            attempts += 1
+            // Stop if we reach the file system root or too many attempts, to prevent infinite loop
+            if packageRootURL.path == "/" || attempts > 10 {
+                fatalError("Could not find .build directory by traversing up from \(currentFileURL.path)")
+            }
         }
-        fatalError("couldn't find the products directory")
+        
+        // Construct the path to the debug products directory
+        // Adjust to "release" if testing release builds
+        let productsDir = packageRootURL.appendingPathComponent(".build/debug")
+
+        print("Determined productsDirectory: \(productsDir.path)")
+        if !FileManager.default.fileExists(atPath: productsDir.path) {
+             fatalError("Products directory does not exist at expected path: \(productsDir.path). Ensure 'swift build' has been run.")
+        }
+        // Optional: Check for CrashTester specifically and print a warning if not found
+        // This can help debug if CrashTester isn't being built or is in a different configuration (e.g., release)
+        if !FileManager.default.fileExists(atPath: productsDir.appendingPathComponent("CrashTester").path) {
+             print("Warning: CrashTester executable not found in determined products directory: \(productsDir.appendingPathComponent("CrashTester").path). It might be in a different build configuration (e.g., release) or not built.")
+        }
+
+        return productsDir
+
         #else
-        return Bundle.main.bundleURL
+        // Fallback for other platforms if needed, though your Package.swift only defines macOS/Linux
+        fatalError("Unsupported OS for productsDirectory determination")
         #endif
     }
 }
